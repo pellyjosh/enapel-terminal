@@ -1,0 +1,89 @@
+# Flutter generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+pubspec.lock
+
+# Obsolete files
+*.lock
+*.log
+*.tmp
+
+# Android specific
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+
+# iOS specific
+ios/Flutter/.last_build_id
+ios/Pods/
+ios/Runner.xcworkspace/
+ios/build/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/ServiceDefinitions.json
+
+# macOS specific
+macos/Flutter/ephemeral/
+macos/.symlinks/
+macos/Flutter/Flutter.podspec
+macos/build/
+
+# Web specific
+web/.dart_tool/
+web/build/
+
+# Windows specific
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/generated_plugin_registrant.cpp
+windows/generated_plugin_registrant.h
+windows/flutter/ephemeral/
+windows/build/
+
+# Linux specific
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/build/
+
+# Dart analysis and IDE specific
+.idea/
+*.iml
+*.ipr
+*.iws
+*.vscode/
+*.swp
+*.swo
+
+# JetBrains IDE specific
+.idea/
+*.iml
+
+# Byte-compiled / optimized / dependency files
+*.pyc
+*.pyo
+*.pyd
+*.class
+
+# Packages
+.packages
+.pip/
+
+# Backup files
+*.bak
+
+# Crash and runtime logs
+*.crash
+*.pid
+*.seed
+<<<<<<< HEAD
+*.manifest
+=======
+*.manifest
+>>>>>>> 3d7571fcd45136b4a03e118217a7bd1121300ae6
