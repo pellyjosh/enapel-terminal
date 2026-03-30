@@ -1,6 +1,10 @@
 name: Build Windows App
 
 on:
+  push:
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -24,7 +28,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows release
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=ENAPEL_CLOUD_URL=https://enapel.hubolux.com
 
       - name: Build Windows installer
         if: ${{ hashFiles('build/windows/installer.iss') != '' }}
