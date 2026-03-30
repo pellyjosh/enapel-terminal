@@ -25,6 +25,17 @@ class Product {
       barcode: json['barcode'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'price': price,
+      'quantity': quantity,
+      'status': status,
+      'barcode': barcode,
+    };
+  }
 }
 
 class Receipt {
@@ -72,11 +83,19 @@ class SaleItems {
     required this.price,
   });
 
-factory SaleItems.fromJson(Map<String, dynamic> json) {
+  factory SaleItems.fromJson(Map<String, dynamic> json) {
     return SaleItems(
       name: json['product_name'] ?? 'Unnamed',
       quantity: json['quantity'] ?? 0,
       price: (json['price'] ?? 0).toDouble(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'product_name': name,
+      'quantity': quantity,
+      'price': price,
+    };
   }
 }

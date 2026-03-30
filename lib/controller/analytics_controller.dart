@@ -9,7 +9,8 @@ import 'package:get/get.dart';
 class AnalyticsController extends GetxController {
   late final EnapelDatabase database;
   late final ApiService apiService;
-  late final bool isServerMode;
+  bool isServerMode = false;
+  bool _isInitialized = false;
 
   var salesList = <SalesModel>[].obs;
   // var expensesList = <ExpenseModel>[].obs;
@@ -23,6 +24,7 @@ class AnalyticsController extends GetxController {
 
   Future<void> _initialize() async {
     isServerMode = await ConnectionHelper.isServerConnection();
+    _isInitialized = true;
 
     if (isServerMode) {
       apiService = Get.put(ApiService());
@@ -35,6 +37,7 @@ class AnalyticsController extends GetxController {
 
 
 Future<void> fetchSales() async {
+    if (!_isInitialized) await _initialize();
     isLoading.value = true;
     hasError.value = false;
 
@@ -75,6 +78,7 @@ Future<void> fetchSales() async {
   }
 
 Future<void> fetchFinanceSummary() async {
+  if (!_isInitialized) await _initialize();
   isLoading.value = true;
    hasError.value = false;
   try {

@@ -3,6 +3,7 @@ import 'package:enapel/database/database.dart';
 class InventoryModel {
   final int? id; // nullable for new items
   final String name;
+  final String? barcode;
   final int quantity;
   final double price;
   final DateTime createdAt;
@@ -12,6 +13,7 @@ class InventoryModel {
   InventoryModel({
     this.id,
     required this.name,
+    this.barcode,
     required this.quantity,
     required this.price,
     required this.createdAt,
@@ -23,6 +25,7 @@ factory InventoryModel.fromApi(Map<String, dynamic> apiData) {
     return InventoryModel(
       id: apiData['id'] != null ? int.tryParse(apiData['id'].toString()) : null,
       name: apiData['name'] ?? '',
+      barcode: apiData['barcode']?.toString(),
       quantity: apiData['quantity'] != null
           ? int.tryParse(apiData['quantity'].toString()) ?? 0
           : 0,
@@ -64,6 +67,7 @@ factory InventoryModel.fromApi(Map<String, dynamic> apiData) {
     return InventoryModel(
       id: item.id,
       name: item.name,
+      // barcode: item.barcode, // Add this when drift table is updated
       quantity: item.quantity,
       price: item.price,
       createdAt: item.createdAt,

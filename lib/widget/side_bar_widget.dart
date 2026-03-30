@@ -5,12 +5,14 @@ class Sidebar extends StatelessWidget {
   final List<Map<String, dynamic>> menuItems;
   final Function(int) onItemSelected;
   final int selectedIndex;
+  final Widget? headerWidget;
 
   const Sidebar({
     super.key,
     required this.menuItems,
     required this.onItemSelected,
     required this.selectedIndex,
+    this.headerWidget,
   });
 
   @override
@@ -24,15 +26,18 @@ class Sidebar extends StatelessWidget {
       child: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
-          children: List.generate(
-            menuItems.length,
-            (index) => _buildSidebarIcon(
-              icon: menuItems[index]['icon'],
-              label: menuItems[index]['label'],
-              index: index,
-              sidebarWidth: sidebarWidth,
+          children: [
+            if (headerWidget != null) headerWidget!,
+            ...List.generate(
+              menuItems.length,
+              (index) => _buildSidebarIcon(
+                icon: menuItems[index]['icon'],
+                label: menuItems[index]['label'],
+                index: index,
+                sidebarWidth: sidebarWidth,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

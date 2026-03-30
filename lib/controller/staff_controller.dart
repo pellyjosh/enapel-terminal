@@ -6,7 +6,8 @@ import '../models/staff_model.dart';
 
 class StaffController extends GetxController {
   late final ApiService apiService;
-  late final bool isServerMode;
+  bool isServerMode = false;
+  bool _isInitialized = false;
 
   var staffList = <StaffModel>[].obs;
   var isLoading = true.obs;
@@ -18,6 +19,7 @@ class StaffController extends GetxController {
 
   Future<void> _initialize() async {
     isServerMode = await ConnectionHelper.isServerConnection();
+    _isInitialized = true;
 
     if (isServerMode) {
       apiService = Get.put(ApiService());
@@ -28,6 +30,7 @@ class StaffController extends GetxController {
   }
 
 Future<void> getStaffs() async {
+    if (!_isInitialized) await _initialize();
     try {
       isLoading.value = true;
       hasError.value = false;

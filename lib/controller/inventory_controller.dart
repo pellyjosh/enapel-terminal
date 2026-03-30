@@ -11,7 +11,8 @@ import 'package:get/get.dart';
 class InventoryController extends GetxController {
   late final EnapelDatabase database;
   late final ApiService apiService;
-  late final bool isServerMode;
+  bool isServerMode = false;
+  bool _isInitialized = false;
 
   var inventoryData = <InventoryModel>[].obs;
   var filteredInventory =
@@ -27,6 +28,7 @@ class InventoryController extends GetxController {
 
   Future<void> _initialize() async {
     isServerMode = await ConnectionHelper.isServerConnection();
+    _isInitialized = true;
     if (isServerMode) {
       apiService = Get.put(ApiService());
       await getInventory();
@@ -36,6 +38,9 @@ class InventoryController extends GetxController {
   }
 
   Future<void> getInventory() async {
+    if (!_isInitialized) {
+      await _initialize();
+    }
     try {
       isLoading.value = true;
       errorMessage.value = '';
@@ -47,8 +52,8 @@ class InventoryController extends GetxController {
           List<InventoryModel> inventoryItems =
               data.map((item) => InventoryModel.fromApi(item)).toList();
           inventoryData.assignAll(inventoryItems);
-          filteredInventory
-              .assignAll(inventoryItems); // ✅ sync filtered initially
+          inventoryDataOriginal.assignAll(inventoryItems); // 👈 store original for search
+          filteredInventory.assignAll(inventoryItems);
           print('✅ Inventory loaded from server');
         } else {
           errorMessage.value =
@@ -60,8 +65,8 @@ class InventoryController extends GetxController {
         List<InventoryModel> inventoryItems =
             query.map((item) => InventoryModel.fromDrift(item)).toList();
         inventoryData.assignAll(inventoryItems);
-        filteredInventory
-            .assignAll(inventoryItems); // ✅ sync filtered initially
+        inventoryDataOriginal.assignAll(inventoryItems); // 👈 store original for search
+        filteredInventory.assignAll(inventoryItems);
         print('✅ Inventory loaded from local database');
       }
     } catch (e) {
@@ -203,8 +208,10 @@ Future<void> deleteItem(int id) async {
       inventoryData.assignAll(allItems);
     } else {
       inventoryData.assignAll(
-        allItems.where(
-            (item) => item.name.toLowerCase().contains(query.toLowerCase())),
+        allItems.where((item) =>
+            item.name.toLowerCase().contains(query.toLowerCase()) ||
+            (item.barcode != null &&
+                item.barcode!.toLowerCase().contains(query.toLowerCase()))),
       );
     }
   }

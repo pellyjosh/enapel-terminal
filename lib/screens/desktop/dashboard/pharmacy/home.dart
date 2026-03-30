@@ -1,7 +1,7 @@
 import 'package:enapel/database/storage/key_storage.dart';
+import 'package:enapel/route/route.dart';
 import 'package:enapel/screens/desktop/dashboard/partials/headers.dart';
-import 'package:enapel/screens/desktop/dashboard/pharmacy/register.dart';
-import 'package:enapel/utils/app_color.dart';
+import 'package:enapel/widgets/dashboard_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -30,9 +30,11 @@ class _HomeState extends State<HomePharmacyScreen> {
       if (userMap != null) {
         setState(() {
           user = userMap;
-          isAdmin = (userMap['isAdmin'] is bool)
-              ? userMap['isAdmin']
-              : userMap['isAdmin'] == 1;
+          final dynamic isAdminVal = userMap['isAdmin'];
+          final String? role = userMap['role']?.toString().toLowerCase();
+          
+          isAdmin = (isAdminVal == true || isAdminVal == 1 || isAdminVal == '1') || 
+                    (role == 'admin' || role == 'super admin' || role == 'superadmin' || role == 'owner');
         });
       }
     } catch (e) {
@@ -43,6 +45,9 @@ class _HomeState extends State<HomePharmacyScreen> {
   void handleMenuSelection(String value) {
     if (value == 'profile') {
       widget.navigateToDashboardContent(12);
+    } else if (value == 'lock') {
+      KeyStorage.saveBool('isLocked', true);
+      Get.offAllNamed(Routes.dashboard); // Refresh to show lock screen
     } else if (value == 'logout') {
       // Handle log-out action
     }
@@ -51,96 +56,173 @@ class _HomeState extends State<HomePharmacyScreen> {
   @override
   Widget build(BuildContext context) {
     if (user == null) {
-      return Center(
-        child: CircularProgressIndicator(color: AppColor.black),
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.black),
       );
     }
 
-    return Column(
-      children: [
-        Header(
-          user: user!,
-          onMenuSelected: handleMenuSelection,
-        ),
-        SizedBox(height: Get.height * 0.05),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Header(
+            user: user!,
+            onMenuSelected: handleMenuSelection,
+          ),
+          const SizedBox(height: 32),
 
-        Expanded(
-          child: Column(
+          // Statistics Row
+          Row(
             children: [
               Expanded(
-                child: GridView.count(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: Get.width * 0.03,
-                  mainAxisSpacing: Get.height * 0.025,
-                  padding: EdgeInsets.symmetric(horizontal: Get.width * 0.02),
+                child: StatCard(
+                  title: "Dispensed Today",
+                  value: "42",
+                  icon: Icons.medication_outlined,
+                  color: Colors.blue,
+                  trend: "+5",
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: StatCard(
+                  title: "Active Prescriptions",
+                  value: "18",
+                  icon: Icons.assignment_outlined,
+                  color: Colors.orange,
+                  trend: "3 Pending",
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: StatCard(
+                  title: "Expiry Alerts",
+                  value: "7",
+                  icon: Icons.warning_amber_outlined,
+                  color: Colors.red,
+                  trend: "Next 30 days",
+                  isNegative: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 48),
+
+          // Tools and Queue Section
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Pharmacy Tools (Left 2/3)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildOptionButton(
-                      icon: Icons.assignment,
-                      label: "patient register",
-                      onTap: () {
-                         widget.navigateToDashboardContent(11);
-                      },
+                    const Text(
+                      "Pharmacy Operations",
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                    _buildOptionButton(
-                      icon: Icons.bar_chart,
-                      label: "reports",
-                      onTap: () {
-                        widget.navigateToDashboardContent(7);
-                      },
+                    const SizedBox(height: 24),
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 20,
+                      mainAxisSpacing: 20,
+                      childAspectRatio: 1.2,
+                      children: [
+                        QuickActionButton(
+                          label: "Dispensing POS",
+                          icon: Icons.point_of_sale_outlined,
+                          color: Colors.blue,
+                          onTap: () => widget.navigateToDashboardContent(3),
+                        ),
+                        QuickActionButton(
+                          label: "Patient Register",
+                          icon: Icons.person_add_outlined,
+                          color: Colors.teal,
+                          onTap: () => widget.navigateToDashboardContent(11),
+                        ),
+                        if (isAdmin)
+                          QuickActionButton(
+                            label: "Drug Catalog",
+                            icon: Icons.inventory_2_outlined,
+                            color: Colors.orange,
+                            onTap: () => widget.navigateToDashboardContent(4),
+                          ),
+                        QuickActionButton(
+                          label: "Prescriptions",
+                          icon: Icons.history_edu_outlined,
+                          color: Colors.purple,
+                          onTap: () => widget.navigateToDashboardContent(10),
+                        ),
+                        if (isAdmin)
+                          QuickActionButton(
+                            label: "Pharmacy Reports",
+                            icon: Icons.analytics_outlined,
+                            color: Colors.red,
+                            onTap: () => widget.navigateToDashboardContent(7),
+                          ),
+                        QuickActionButton(
+                          label: "Drug Lookup",
+                          icon: Icons.search_outlined,
+                          color: Colors.grey,
+                          onTap: () {},
+                        ),
+                      ],
                     ),
-                    _buildOptionButton(
-                      icon: Icons.manage_accounts,
-                      label: "Patient Management",
-                      onTap: () {
-                        widget.navigateToDashboardContent(10);
-                      },
+                  ],
+                ),
+              ),
+              const SizedBox(width: 48),
+              // Prescription Queue (Right 1/3)
+              Expanded(
+                flex: 1,
+                child: ActivityList(
+                  title: "Prescription Queue",
+                  onSeeAll: () {},
+                  items: [
+                    ActivityItem(
+                      title: "John Doe",
+                      subtitle: "Amoxicillin - Waiting",
+                      time: "5m ago",
+                      icon: Icons.pending_actions_outlined,
+                      iconColor: Colors.orange,
+                    ),
+                    ActivityItem(
+                      title: "Jane Smith",
+                      subtitle: "Paracetamol - Ready",
+                      time: "12m ago",
+                      icon: Icons.check_circle_outline,
+                      iconColor: Colors.green,
+                    ),
+                    ActivityItem(
+                      title: "Robert Brown",
+                      subtitle: "Insulin - Ready",
+                      time: "25m ago",
+                      icon: Icons.check_circle_outline,
+                      iconColor: Colors.green,
+                    ),
+                    ActivityItem(
+                      title: "Emma Wilson",
+                      subtitle: "Ibuprofen - Processing",
+                      time: "40m ago",
+                      icon: Icons.sync_outlined,
+                      iconColor: Colors.blue,
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        ),
-
-        // Dynamic Content with AnimatedSwitcher
-      ],
-    );
-  }
-}
-
-Widget _buildOptionButton({
-  required IconData icon,
-  required String label,
-  required VoidCallback onTap, // Add onTap parameter for navigation
-}) {
-  return GestureDetector(
-    onTap: onTap, // Trigger navigation on tap
-    child: Container(
-      padding: EdgeInsets.all(Get.width * 0.02),
-      decoration: BoxDecoration(
-        color: AppColor.black,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            color: AppColor.white,
-            size: Get.width * 0.05, // Responsive icon size
-          ),
-          SizedBox(height: Get.height * 0.01),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColor.white,
-              fontSize: Get.width * 0.012, // Responsive text size
-              fontWeight: FontWeight.bold,
-            ),
-          ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }

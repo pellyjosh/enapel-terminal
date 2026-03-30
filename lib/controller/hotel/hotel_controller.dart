@@ -15,7 +15,8 @@ import 'package:intl/intl.dart';
 class HotelController extends GetxController {
   late final EnapelDatabase database;
   late final ApiService apiService;
-  late final bool isServerMode;
+  bool isServerMode = false;
+  bool _isInitialized = false;
 
   var roomStatistics = [].obs;
   var bookedDates = <DateTime>[].obs;
@@ -52,6 +53,7 @@ class HotelController extends GetxController {
 
   Future<void> _initialize() async {
     isServerMode = await ConnectionHelper.isServerConnection();
+    _isInitialized = true;
 
     if (isServerMode) {
       apiService = Get.put(ApiService());
@@ -103,6 +105,9 @@ class HotelController extends GetxController {
 
   Future<void> getRooms(
       {String query = '', bool autoAssignToFiltered = false}) async {
+    if (!_isInitialized) {
+      await _initialize();
+    }
     isRoomLoading.value = true;
     roomError.value = false;
     try {

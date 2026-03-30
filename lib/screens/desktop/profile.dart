@@ -1,7 +1,8 @@
+import 'package:enapel/database/storage/key_storage.dart';
 import 'package:enapel/utils/app_color.dart';
 import 'package:enapel/widget/custom_text_field.dart';
 import 'package:flutter/material.dart';
-
+import 'package:get/get.dart';
 
 class ProfileSettings extends StatefulWidget {
   const ProfileSettings({super.key});
@@ -11,6 +12,30 @@ class ProfileSettings extends StatefulWidget {
 }
 
 class _ProfileSettingsState extends State<ProfileSettings> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _currentPasswordController = TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+
+  Map<String, dynamic>? user;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  void _loadUserData() {
+    user = KeyStorage.getMap('user');
+    if (user != null) {
+      _nameController.text = user!['name'] ?? '';
+      _emailController.text = user!['email'] ?? '';
+      _phoneController.text = user!['phone'] ?? '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -28,65 +53,56 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     sectionTitle("Personal Info",
-                        "You can change your personal information settings here."),
-                     CustomTextField(
+                        "You can see your personal information settings here."),
+                    CustomTextField(
                       labelText: "Full Name",
-                       labelTextColor: AppColor.white,
-                      hintText: "Azusa Nakano",
+                      labelTextColor: AppColor.white,
+                      controller: _nameController,
+                      hintText: "Full name",
+                      readOnly: true, // Typically name is read-only in terminal
                     ),
                     const SizedBox(height: 18),
-                     CustomTextField(
+                    CustomTextField(
                       labelText: "Email Address",
-                      labelTextColor:AppColor.white,
-                      hintText: "elementary221b@gmail.com",
+                      labelTextColor: AppColor.white,
+                      controller: _emailController,
+                      hintText: "Email address",
                       prefixIcon: Icons.email,
+                      readOnly: true,
                     ),
                     const SizedBox(height: 18),
-                     CustomTextField(
+                    CustomTextField(
                       labelText: "Phone Number",
-                       labelTextColor: AppColor.white,
-                      hintText: "+44 (123) 456-9878",
+                      labelTextColor: AppColor.white,
+                      controller: _phoneController,
+                      hintText: "Phone number",
                       prefixIcon: Icons.phone,
                     ),
+                    const SizedBox(height: 30),
+                    sectionTitle("Change Password",
+                        "Update your password to keep your account secure."),
+                    CustomTextField(
+                      labelText: "Current Password",
+                      labelTextColor: AppColor.white,
+                      hintText: "Enter current password",
+                      obscureText: true,
+                      controller: _currentPasswordController,
+                    ),
                     const SizedBox(height: 18),
                     CustomTextField(
-                      labelText: "Account Type",
-                     labelTextColor: AppColor.white,
-                      hintText: "Regular",
-                      dropdownItems: ["Regular", "Premium"],
-                      selectedDropdownValue: "Regular",
-                      onDropdownChanged: (value) {},
+                      labelText: "New Password",
+                      labelTextColor: AppColor.white,
+                      hintText: "Enter new password",
+                      obscureText: true,
+                      controller: _newPasswordController,
                     ),
-                    const SizedBox(height: 30),
-                    avatarUpload(),
-                    const SizedBox(height: 30),
-                    sectionTitle("Payments",
-                        "You can change your payment credentials here."),
-                    toggleSwitch("Enable Auto Payout", true),
-                    toggleSwitch("Notify New Payments", false),
-                     CustomTextField(
-                      labelText: "Credit Card",
-                       labelTextColor: AppColor.white,
-                      hintText: "9978 1128 1558 1978",
-                      prefixIcon: Icons.credit_card,
-                    ),
-                     CustomTextField(
-                      labelText: "Card Holder Name",
-                       labelTextColor: AppColor.white,
-                      hintText: "Azusa Nakano",
-                      prefixIcon: Icons.person,
-                    ),
+                    const SizedBox(height: 18),
                     CustomTextField(
-                      labelText: "Country",
-                       labelTextColor: AppColor.white,
-                      hintText: "United Kingdom",
-                      dropdownItems: const [
-                        "United Kingdom",
-                        "United States",
-                        "Canada"
-                      ],
-                      selectedDropdownValue: "United Kingdom",
-                      onDropdownChanged: (value) {},
+                      labelText: "Confirm New Password",
+                      labelTextColor: AppColor.white,
+                      hintText: "Confirm new password",
+                      obscureText: true,
+                      controller: _confirmPasswordController,
                     ),
                     const SizedBox(height: 30),
                     actionButtons(),
@@ -99,6 +115,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
       },
     );
   }
+
   Widget sectionTitle(String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -106,7 +123,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style:  TextStyle(
+              style: TextStyle(
                   color: AppColor.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold)),
@@ -119,73 +136,51 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     );
   }
 
- 
-
-  Widget avatarUpload() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: AppColor.grey,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          const CircleAvatar(
-              radius: 40,
-              backgroundImage:
-                  AssetImage("assets/avatar.jpg")), // Replace with NetworkImage
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () {},
-            child:  Text("Click here to upload your file or drag",
-                style: TextStyle(color: AppColor.primary)),
-          ),
-           Text("Supported Format: SVG, JPG, PNG (10MB each)",
-              style: TextStyle(color: AppColor.grey, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget toggleSwitch(String label, bool isActive) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style:  TextStyle(color: AppColor.white, fontSize: 16)),
-          Switch(
-            value: isActive,
-            onChanged: (value) {},
-            activeColor: AppColor.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-
-
   Widget actionButtons() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         TextButton(
-          onPressed: () {},
+          onPressed: () {
+            _currentPasswordController.clear();
+            _newPasswordController.clear();
+            _confirmPasswordController.clear();
+          },
           style: TextButton.styleFrom(foregroundColor: AppColor.danger),
-          child: const Text("Cancel"),
+          child: const Text("Clear Fields"),
         ),
         ElevatedButton(
-          onPressed: () {},
+          onPressed: () {
+            // Handle Save logic
+            _saveProfile();
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColor.primary,
             padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
           ),
-          child: const Text("Save", style: TextStyle(fontSize: 16)),
+          child: const Text("Save Changes", style: TextStyle(fontSize: 16)),
         ),
       ],
     );
+  }
+
+  void _saveProfile() {
+    // Check if password change is attempted
+    if (_newPasswordController.text.isNotEmpty) {
+      if (_newPasswordController.text != _confirmPasswordController.text) {
+        Get.snackbar("Error", "New passwords do not match",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return;
+      }
+      if (_currentPasswordController.text.isEmpty) {
+        Get.snackbar("Error", "Please enter current password to verify",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return;
+      }
+    }
+
+    // Logic for updating profile/password would go here
+    Get.snackbar("Success", "Profile updated successfully (Mock)",
+        backgroundColor: Colors.green, colorText: Colors.white);
   }
 }

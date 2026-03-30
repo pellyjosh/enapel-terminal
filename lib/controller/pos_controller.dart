@@ -4,7 +4,6 @@ import 'package:enapel/api/api_service.dart';
 import 'package:enapel/api/config.dart';
 import 'package:enapel/database/connection.dart';
 import 'package:enapel/database/database.dart';
-import 'package:enapel/helper/db_connection_helper.dart';
 import 'package:enapel/models/cart_item_model.dart';
 import 'package:enapel/models/product_model.dart';
 import 'package:enapel/utils/notification.dart';
@@ -12,9 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:enapel/services/window_protocol.dart';
+
 class PosController extends GetxController {
+  final int windowId;
   late final EnapelDatabase database;
-  static Future<bool> isServerMode = ConnectionHelper.isServerConnection();
+  bool _isServerMode = false;
+  Future<bool> get isServerMode async => _isServerMode;
   late final ApiService apiService;
 
   TextEditingController cashAmountPaidController = TextEditingController();
@@ -28,18 +31,23 @@ class PosController extends GetxController {
   var paymentMethod = "";
   var change = 0.0.obs;
   final RxList<String> pendingReceiptNumbers = <String>[].obs;
+  final RxList<int> activeWindowIds = <int>[0].obs; // Master starts at 0
+  
+  void removeWindowId(int id) {
+    if (id != 0) { // Never remove the master window
+      activeWindowIds.remove(id);
+      print("Removed Window ID: $id. Active IDs: $activeWindowIds");
+    }
+  }
 
 
-  // PosController(String databaseMode) {
-  //   if (databaseMode == 'local') {
-  //     database = Get.put(EnapelDatabase(openLocalConnection()));
-  //   } else {
-  //     throw Exception("Only local database mode is supported for now.");
-  //   }
-  // }
+  final String? injectedServerIp;
+  final String? injectedUserToken;
 
-  PosController(String databaseMode) {
-    print('Database mode: $databaseMode');
+
+  PosController(String databaseMode, {this.injectedServerIp, this.injectedUserToken, this.windowId = 0}) {
+    print('Window ID: $windowId, Database mode: $databaseMode');
+    _isServerMode = (databaseMode == 'server');
 
     if (databaseMode == 'local') {
       if (!Get.isRegistered<EnapelDatabase>()) {
@@ -47,7 +55,16 @@ class PosController extends GetxController {
       }
       database = Get.find<EnapelDatabase>();
     } else {
-      apiService = Get.put(ApiService());
+      // Only initialize ApiService in the primary window (Window ID 0)
+      if (windowId == 0) {
+        if (!Get.isRegistered<ApiService>()) {
+          Get.put(ApiService(
+            injectedServerIp: injectedServerIp,
+            injectedUserToken: injectedUserToken,
+          ));
+        }
+        apiService = Get.find<ApiService>();
+      }
     }
     generatePosCode();
   }
@@ -55,6 +72,17 @@ class PosController extends GetxController {
   void generatePosCode() async {
     // if (posCode.value.isEmpty) {
     if (await isServerMode) {
+      // MIRROR LOGIC
+      if (windowId != 0) {
+        final result = await WindowProtocol.invokeMaster('generatePosCode', null);
+        if (result != null) {
+          posCode.value = result.toString();
+          print("POS Code fetched via Mirror Protocol.");
+        }
+        return;
+      }
+
+      // MASTER LOGIC
       try {
         final response = await apiService.get(Config.generatePosCode);
         if (response['success'] == true) {
@@ -86,24 +114,40 @@ class PosController extends GetxController {
 
   Future<void> checkout() async {
     if (await isServerMode) {
-      try {
-        final orderData = {
-          "posCode": posCode.value,
-          "total": totalAmount.value.toDouble(),
-          "method": paymentMethod,
-          "cashPaid": cashAmountPaidController.text ?? 0.00,
-          "change": change.toDouble(),
-          "items": cart
-              .map((item) => {
-                    "productId": item.product.id,
-                    "name": item.product.name,
-                    "quantity": item.quantity,
-                    "price": item.product.price
-                  })
-              .toList(),
-          "date": DateTime.now().toIso8601String(),
-        };
+      final orderData = {
+        "posCode": posCode.value,
+        "total": totalAmount.value.toDouble(),
+        "method": paymentMethod,
+        "cashPaid": cashAmountPaidController.text ?? 0.00,
+        "change": change.toDouble(),
+        "items": cart
+            .map((item) => {
+                  "productId": item.product.id,
+                  "name": item.product.name,
+                  "quantity": item.quantity,
+                  "price": item.product.price
+                })
+            .toList(),
+        "date": DateTime.now().toIso8601String(),
+      };
 
+      // MIRROR LOGIC
+      if (windowId != 0) {
+        final result = await WindowProtocol.invokeMaster('checkout', orderData);
+        if (result != null) {
+          final response = result as Map<String, dynamic>;
+          if (response['success'] == true) {
+            NotificationService.showSuccess(title: 'Success', message: 'Checkout Successful (Mirrored)');
+            clearCart();
+          } else {
+            print("Mirror Checkout failed: ${response['error']}");
+          }
+        }
+        return;
+      }
+
+      // MASTER LOGIC
+      try {
         final response = await apiService.post(Config.checkOut, orderData);
 
         if (response['success'] == true) {
@@ -152,7 +196,6 @@ class PosController extends GetxController {
     }
   }
   Future<void> savePendingReceipt() async {
-  try {
     final posCodeValue = "POS-${DateTime.now().millisecondsSinceEpoch}";
     final now = DateTime.now();
 
@@ -173,22 +216,51 @@ class PosController extends GetxController {
           .toList()
     };
 
-    final response = await apiService.post(Config.checkOut, payload);
-
-    if (response['success'] == true) {
-      pendingReceiptNumbers.add(posCodeValue); // Update list for UI
-      NotificationService.showSuccess(
-          title: 'Saved', message: 'Receipt saved as pending');
-      clearCart(); // Optionally clear POS
-    } else {
-      print("❌ Error saving pending receipt: ${response['message']}");
+    // MIRROR LOGIC
+    if (windowId != 0) {
+      final result = await WindowProtocol.invokeMaster('savePendingReceipt', payload);
+      if (result != null) {
+        final response = result as Map<String, dynamic>;
+        if (response['success'] == true) {
+          pendingReceiptNumbers.add(posCodeValue);
+          NotificationService.showSuccess(title: 'Saved', message: 'Receipt saved as pending (Mirrored)');
+          clearCart();
+        }
+      }
+      return;
     }
-  } catch (e) {
-    print("❌ Exception saving pending receipt: $e");
-  }
-}
 
-Future<Receipt> getReceiptDetails(String receiptNumber) async {
+    // MASTER LOGIC
+    try {
+      final response = await apiService.post(Config.checkOut, payload);
+
+      if (response['success'] == true) {
+        pendingReceiptNumbers.add(posCodeValue); // Update list for UI
+        NotificationService.showSuccess(
+            title: 'Saved', message: 'Receipt saved as pending');
+        clearCart(); // Optionally clear POS
+      } else {
+        print("❌ Error saving pending receipt: ${response['message']}");
+      }
+    } catch (e) {
+      print("❌ Exception saving pending receipt: $e");
+    }
+  }
+
+  Future<Receipt> getReceiptDetails(String receiptNumber) async {
+    // MIRROR LOGIC
+    if (windowId != 0) {
+      final result = await WindowProtocol.invokeMaster('getReceiptDetails', receiptNumber);
+      if (result != null) {
+        final response = result as Map<String, dynamic>;
+        if (response['success'] == true && response['receipt'] != null) {
+          return Receipt.fromJson(response['receipt']);
+        }
+      }
+      throw Exception("Mirrored receipt fetch failed");
+    }
+
+    // MASTER LOGIC
     try {
       final response = await apiService.get('receipts/$receiptNumber');
 
@@ -206,6 +278,18 @@ Future<Receipt> getReceiptDetails(String receiptNumber) async {
 
   Future<void> products(String query) async {
     if (await isServerMode) {
+      // MIRROR LOGIC: If we are in a sub-window, request data from the master window
+      if (windowId != 0) {
+        final result = await WindowProtocol.invokeMaster('searchProducts', query);
+        if (result != null) {
+          final List<dynamic> data = result as List<dynamic>;
+          productData.assignAll(data.map((e) => Product.fromJson(Map<String, dynamic>.from(e))).toList());
+          print("Products fetched via Mirror Protocol.");
+        }
+        return;
+      }
+
+      // MASTER LOGIC: Regular API call
       try {
         final url = query.isNotEmpty
             ? '${Config.getProduct}?search=$query'
@@ -216,7 +300,7 @@ Future<Receipt> getReceiptDetails(String receiptNumber) async {
         if (response['success'] == true) {
           List<dynamic> data = response['data'];
           productData.assignAll(data.map((e) => Product.fromJson(e)).toList());
-          print("Products fetched successfully.");
+          print("Products fetched successfully from Server.");
         } else {
           print("Error fetching products: ${response['message']}");
         }

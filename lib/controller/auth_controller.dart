@@ -9,6 +9,7 @@ import 'package:enapel/models/database/user_model.dart';
 import 'package:enapel/route/route.dart';
 import 'package:enapel/services/license_service.dart';
 import 'package:enapel/utils/notification.dart';
+import 'package:enapel/services/activity_logger.dart';
 import 'package:get/get.dart';
 
 class AuthController extends GetxController {
@@ -58,9 +59,14 @@ class AuthController extends GetxController {
             final Map<String, dynamic> user = response['user'];
 
             await KeyStorage.saveString('userToken', token);
-            await KeyStorage.saveMap('user', user);
+              await KeyStorage.saveMap('user', user);
+              
+              await ActivityLogger.log(
+                action: 'Login',
+                description: 'User ${user['name']} logged in via Terminal',
+              );
 
-            final storedUser = KeyStorage.getMap('user');
+              final storedUser = KeyStorage.getMap('user');
             final storedToken = KeyStorage.getString('userToken');
 
             if (storedUser != null &&

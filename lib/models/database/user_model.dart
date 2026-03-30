@@ -6,6 +6,7 @@ class UserModel {
   final String email;
   final String password;
   final bool isAdmin;
+  final String? role;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -15,6 +16,7 @@ class UserModel {
     required this.email,
     required this.password,
     required this.isAdmin,
+    this.role,
     this.createdAt,
     this.updatedAt,
   });
@@ -38,6 +40,7 @@ class UserModel {
       'name': name,
       'email': email,
       'isAdmin': isAdmin,
+      'role': role,
     };
   }
 }
@@ -48,6 +51,7 @@ Map<String, dynamic> userToMap(User user) {
     'name': user.name,
     'email': user.email,
     'isAdmin': user.isAdmin,
+    'role': 'user', // Default role for local users
   };
 }
 

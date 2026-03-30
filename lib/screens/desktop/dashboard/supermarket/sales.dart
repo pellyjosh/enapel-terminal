@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:enapel/controller/pos_controller.dart';
+import 'package:enapel/controller/shortcut_controller.dart';
 import 'package:enapel/database/storage/key_storage.dart';
 import 'package:enapel/models/cart_item_model.dart';
 import 'package:enapel/models/product_model.dart';
+import 'package:enapel/services/window_protocol.dart';
 import 'package:enapel/utils/app_color.dart';
 import 'package:enapel/utils/notification.dart';
 import 'package:enapel/widget/custom_button.dart';
@@ -21,8 +22,17 @@ import 'package:uuid/uuid.dart';
 
 class PointOfSalesScreen extends StatefulWidget {
   final String? databaseMode;
+  final String? serverIp;
+  final String? userToken;
+  final int windowId;
 
-  const PointOfSalesScreen({super.key, this.databaseMode});
+  const PointOfSalesScreen({
+    super.key,
+    this.databaseMode,
+    this.serverIp,
+    this.userToken,
+    this.windowId = 0,
+  });
 
   @override
   State<PointOfSalesScreen> createState() => _PointOfSalesState();
@@ -44,8 +54,9 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
   final TextEditingController scanController = TextEditingController();
   String scannedText = '';
   Timer? scanTimer;
+  Timer? searchTimer;
+  Worker? _scannedProductsWorker;
   final RxList<CartItem> cart = <CartItem>[].obs;
-  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -55,11 +66,24 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
     rawKeyFocusNode.addListener(_handleFocusChange);
     rawKeyFocusNode.requestFocus();
     scanFocusNode.addListener(_handleScanFocusChange);
+
+    // Register terminal opening listener (Master only)
+    if (widget.windowId == 0) {
+      WindowProtocol.onOpenTerminalRequest = _handleOpenNewTerminal;
+    }
   }
 
   void _handleFocusChange() {
-    if (!rawKeyFocusNode.hasFocus) {
-      rawKeyFocusNode.requestFocus(); // Immediately reclaim focus
+    // Only reclaim focus if we are NOT currently scanning/searching
+    // and if the focal point is not already a text field.
+    if (!rawKeyFocusNode.hasFocus && !isScanning) {
+      // Small delay to allow other focus events to process
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !FocusScope.of(context).hasFocus) {
+           // rawKeyFocusNode.requestFocus(); 
+           // Commenting this out as it causes focus loops across windows
+        }
+      });
     }
   }
 
@@ -98,16 +122,14 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
 
   @override
   void dispose() {
-    quantities.clear();
-    scanController.dispose();
-    scanFocusNode.dispose();
-    rawKeyFocusNode.dispose();
+    _scannedProductsWorker?.dispose();
     scanTimer?.cancel();
-
-    if (!Get.isRegistered<PosController>()) {
-      Get.delete<PosController>();
-    }
-
+    searchTimer?.cancel();
+    scanController.dispose();
+    scanFocusNode.removeListener(_handleScanFocusChange);
+    scanFocusNode.dispose();
+    rawKeyFocusNode.removeListener(_handleFocusChange);
+    rawKeyFocusNode.dispose();
     super.dispose();
   }
 
@@ -124,22 +146,33 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
       if (Get.isRegistered<PosController>()) {
         posController = Get.find<PosController>();
       } else {
-        posController = PosController(databaseMode);
+        posController = Get.put(PosController(
+          databaseMode,
+          injectedServerIp: widget.serverIp,
+          injectedUserToken: widget.userToken,
+          windowId: widget.windowId,
+        ));
       }
 
-      ever<List<Product>>(scannedProducts, (scannedList) {
+      // 🚀 Load initial inventory immediately
+      await updateProducts('');
+
+      _scannedProductsWorker = ever<List<Product>>(scannedProducts, (scannedList) {
+        if (!mounted) return;
         for (var product in scannedList) {
-          if (!cart.any((item) => item.product.id == product.id)) {
+          if (!posController.cart.any((item) => item.product.id == product.id)) {
             posController.addToCart(product, 1);
           }
         }
       });
     } catch (e) {
-      print("Error initializing controller: $e");
+      print("Error during POS initialization: $e");
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -153,12 +186,55 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
     await posController.products(query);
     print("Fetched products: ${posController.productData}");
 
-    // Update the searched products list with fetched data
-    searchedProducts.value = posController.productData;
-
-    // Set initial quantities (this will only execute for the products you just fetched)
-    for (var product in searchedProducts) {
+    // Set initial quantities BEFORE updating searchedProducts to avoid race conditions in UI
+    for (var product in posController.productData) {
       quantities.putIfAbsent(product.id, () => 1);
+    }
+
+    // Update the searched products list with fetched data - triggers UI rebuild
+    searchedProducts.value = posController.productData;
+  }
+
+  Future<void> _handleOpenNewTerminal() async {
+    print('Opening new terminal...');
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final databaseMode = KeyStorage.getString('database_mode') ?? 'local';
+      final serverIp = KeyStorage.getString('serverIp') ?? 
+                       KeyStorage.getString('server_ip') ?? 
+                       '127.0.0.1:8001';
+      final userToken = KeyStorage.getString('userToken') ?? '';
+
+      final window = await DesktopMultiWindow.createWindow(jsonEncode({
+        'args1': 'Sub window',
+        'databaseMode': databaseMode,
+        'serverIp': serverIp,
+        'userToken': userToken,
+        'storage': {
+          'database_mode': databaseMode,
+          'serverIp': serverIp,
+          'server_ip': serverIp,
+          'userToken': userToken,
+          'license_status': KeyStorage.getMap('license_status'),
+          'active_module': KeyStorage.getString('active_module'),
+          'isLocked': KeyStorage.getBool('isLocked'),
+        }
+      }));
+      
+      // Stagger window position to prevent perfect stacking
+      final windowCount = posController.activeWindowIds.length;
+      final offset = 30.0 * windowCount;
+
+      window
+        ..setFrame((Offset(100 + offset, 100 + offset)) & const Size(1600, 1000))
+        ..setTitle("Enapel POS - Terminal ${window.windowId}")
+        ..show();
+
+      // Track window ID for sequential navigation (Master only)
+      if (posController.windowId == 0) {
+        if (!posController.activeWindowIds.contains(window.windowId)) {
+          posController.activeWindowIds.add(window.windowId);
+        }
+      }
     }
   }
 
@@ -226,6 +302,7 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
       },
       child: Stack(
         clipBehavior: Clip.none,
+        fit: StackFit.expand,
         children: [
           buildPOSLayout(),
         ],
@@ -305,11 +382,14 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                       horizontal: 16.0,
                     ),
                     onChanged: (value) {
+                      searchTimer?.cancel();
                       if (value.trim().isEmpty) {
                         currentSearch.value = '';
                         searchedProducts.clear();
                       } else {
-                        updateProducts(value);
+                        searchTimer = Timer(const Duration(milliseconds: 500), () {
+                          updateProducts(value);
+                        });
                       }
                     },
                   ),
@@ -404,28 +484,8 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                               );
                             }),
                             IconButton(
-                              onPressed: () async {
-                                print('new window clicked');
-                                if (Platform.isWindows ||
-                                    Platform.isLinux ||
-                                    Platform.isMacOS) {
-                                  print('is Desktop');
-                                  final databaseMode =
-                                      KeyStorage.getString('database_mode') ??
-                                          'local';
-                                  DesktopMultiWindow.createWindow(jsonEncode({
-                                    'args1': 'Sub window',
-                                    'databaseMode': databaseMode
-                                  })).then((value) {
-                                    value
-                                      ..setFrame(const Offset(0, 0) &
-                                          const Size(800, 700))
-                                      ..center()
-                                      ..setTitle("New Secondary Window")
-                                      ..show();
-                                  });
-                                }
-                              },
+                              onPressed: _handleOpenNewTerminal,
+                              tooltip: 'Open New Terminal (${Get.find<ShortcutController>().getLabel('open_terminal')})',
                               icon: Icon(Icons.add_card, color: AppColor.white),
                             ),
                           ],
@@ -530,7 +590,7 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                                   Text(
                                                     '${product.price}',
                                                     style: TextStyle(
-                                                      color: AppColor.grey,
+                                                      color: AppColor.black,
                                                       fontSize: 14,
                                                     ),
                                                   ),
@@ -776,7 +836,8 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                                                         item.product
                                                                             .name,
                                                                         style:
-                                                                            const TextStyle(
+                                                                            TextStyle(
+                                                                          color: AppColor.black,
                                                                           fontSize:
                                                                               18,
                                                                           fontWeight:
@@ -789,7 +850,8 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                                                       Text(
                                                                         '₦${item.product.price} x ${item.quantity}',
                                                                         style:
-                                                                            const TextStyle(
+                                                                            TextStyle(
+                                                                          color: AppColor.black,
                                                                           fontSize:
                                                                               16,
                                                                         ),
@@ -800,7 +862,8 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                                                 Text(
                                                                   '₦${item.product.price * item.quantity}',
                                                                   style:
-                                                                      const TextStyle(
+                                                                      TextStyle(
+                                                                    color: AppColor.black,
                                                                     fontSize:
                                                                         16,
                                                                     fontWeight:
@@ -873,7 +936,7 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                             Text(
                                               '₦${posController.subtotalAmount}',
                                               style: TextStyle(
-                                                color: AppColor.grey,
+                                                color: AppColor.black,
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w400,
                                               ),
@@ -896,7 +959,7 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                             Text(
                                               '₦${posController.vatAmount}',
                                               style: TextStyle(
-                                                color: AppColor.grey,
+                                                color: AppColor.black,
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w400,
                                               ),
@@ -925,7 +988,7 @@ class _PointOfSalesState extends State<PointOfSalesScreen> {
                                         Text(
                                           '₦${posController.totalAmount}',
                                           style: TextStyle(
-                                            color: AppColor.grey,
+                                            color: AppColor.black,
                                             fontSize: 20,
                                             fontWeight: FontWeight.bold,
                                           ),

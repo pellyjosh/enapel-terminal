@@ -5,14 +5,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class KeyStorage {
   static late SharedPreferences _prefs;
+  static bool _isMirror = false;
+  static final Map<String, dynamic> _mirrorCache = {};
 
   static Future<void> init() async {
+    if (_isMirror) return; // Mirror mode uses memory cache
+    
     print('preference initialized');
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       // Skip initializing SharedPreferences in secondary windows
       if (const bool.hasEnvironment('FLUTTER_MULTI_WINDOW')) return;
     }
     _prefs = await SharedPreferences.getInstance();
+  }
+
+  static void initMirror(Map<String, dynamic> data) {
+    _isMirror = true;
+    _mirrorCache.addAll(data);
+    print("KeyStorage: Initialized in Mirror Mode with ${data.length} keys.");
   }
 
   /// Save a boolean value
@@ -23,6 +33,12 @@ class KeyStorage {
 
   /// Retrieve a boolean value
   static bool getBool(String key, {bool defaultValue = false}) {
+    if (_isMirror) {
+      final val = _mirrorCache[key];
+      if (val is bool) return val;
+      if (val is String) return val.toLowerCase() == 'true';
+      return defaultValue;
+    }
     final value = _prefs.getBool(key) ?? defaultValue;
     print("Retrieved: $key = $value");
     return value;
@@ -36,6 +52,9 @@ class KeyStorage {
 
   /// Retrieve a string value
   static String? getString(String key, {String? defaultValue}) {
+    if (_isMirror) {
+      return _mirrorCache[key]?.toString() ?? defaultValue;
+    }
     final value = _prefs.getString(key) ?? defaultValue;
     print("Retrieved: $key = $value");
     return value;
@@ -49,6 +68,12 @@ class KeyStorage {
 
   /// Retrieve an integer value
   static int? getInt(String key, {int? defaultValue}) {
+    if (_isMirror) {
+      final val = _mirrorCache[key];
+      if (val is int) return val;
+      if (val is String) return int.tryParse(val);
+      return defaultValue;
+    }
     final value = _prefs.getInt(key) ?? defaultValue;
     print("Retrieved: $key = $value");
     return value;
@@ -62,6 +87,13 @@ class KeyStorage {
 
   /// Retrieve a double value
   static double? getDouble(String key, {double? defaultValue}) {
+    if (_isMirror) {
+      final val = _mirrorCache[key];
+      if (val is double) return val;
+      if (val is num) return val.toDouble();
+      if (val is String) return double.tryParse(val);
+      return defaultValue;
+    }
     final value = _prefs.getDouble(key) ?? defaultValue;
     print("Retrieved: $key = $value");
     return value;
@@ -76,6 +108,19 @@ class KeyStorage {
 
   /// Retrieve a map (parse from JSON string)
   static Map<String, dynamic>? getMap(String key) {
+    if (_isMirror) {
+      final val = _mirrorCache[key];
+      if (val is Map<String, dynamic>) return val;
+      if (val is Map) return Map<String, dynamic>.from(val);
+      if (val is String) {
+        try {
+          return Map<String, dynamic>.from(jsonDecode(val));
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
     final jsonString = _prefs.getString(key);
     if (jsonString != null) {
       return Map<String, dynamic>.from(jsonDecode(jsonString));

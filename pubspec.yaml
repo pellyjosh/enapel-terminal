@@ -52,7 +52,6 @@ dependencies:
   intl: ^0.19.0
   excel: ^4.0.6
   syncfusion_flutter_xlsio: ^27.2.4
-  bitsdojo_window: ^0.1.6
   uuid: ^4.5.1
   shimmer: ^3.0.0
   syncfusion_flutter_datepicker: ^27.2.5

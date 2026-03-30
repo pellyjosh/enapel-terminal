@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:enapel/controller/connectivity_controller.dart';
 import 'package:enapel/database/storage/key_storage.dart';
 import 'package:enapel/route/route.dart';
 import 'package:enapel/services/license_service.dart';
@@ -9,17 +11,20 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   late String baseUrl;
+  final String? injectedServerIp;
+  final String? injectedUserToken;
   final TerminalLicenseService _licenseService = TerminalLicenseService();
+  final ConnectivityController _connectivityController = Get.find<ConnectivityController>();
 
-  ApiService() {
+  ApiService({this.injectedServerIp, this.injectedUserToken}) {
     _initializeBaseUrl();
   }
-  Future<String?> _getToken() async {
-    return KeyStorage.getString('userToken');
+  String? _getToken() {
+    return injectedUserToken ?? KeyStorage.getString('userToken');
   }
 
-  Future<void> _initializeBaseUrl() async {
-    String? serverIp =
+  void _initializeBaseUrl() {
+    String? serverIp = injectedServerIp ??
         KeyStorage.getString('serverIp') ?? KeyStorage.getString('server_ip');
     if (serverIp == null || serverIp.isEmpty) {
       NotificationService.showError(
@@ -35,7 +40,7 @@ class ApiService {
   }
 
   Future<void> reinitialize() async {
-    await _initializeBaseUrl();
+    _initializeBaseUrl();
   }
 
   Future<void> initialize() async {
@@ -48,6 +53,7 @@ class ApiService {
               title: "Success",
               message: "Server connected successfully.",
             );
+            _connectivityController.setServerUp();
             return;
           }
         } catch (_) {
@@ -56,51 +62,75 @@ class ApiService {
       }
       throw Exception("Failed to connect to server after multiple attempts.");
     } catch (e) {
+      _connectivityController.setServerDown();
       throw Exception("Error initializing API service: $e");
     }
   }
 
   Future<Map<String, dynamic>> get(String endpoint) async {
-    final token = await _getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-    return _handleResponse(response);
+    try {
+      final token = _getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/$endpoint'),
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+      _connectivityController.setServerUp();
+      return _handleResponse(response);
+    } catch (e) {
+      _handleConnectionError(e);
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> post(
       String endpoint, Map<String, dynamic> data) async {
-    final token = await _getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode(data),
-    );
-
-    return _handleResponse(response);
+    try {
+      final token = _getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/$endpoint'),
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(data),
+      ).timeout(const Duration(seconds: 15));
+      _connectivityController.setServerUp();
+      return _handleResponse(response);
+    } catch (e) {
+      _handleConnectionError(e);
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> delete(String endpoint) async {
-    final token = await _getToken();
-    final response = await http.delete(
-      Uri.parse('$baseUrl/$endpoint'),
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final token = _getToken();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/$endpoint'),
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+      _connectivityController.setServerUp();
+      return _handleResponse(response);
+    } catch (e) {
+      _handleConnectionError(e);
+      rethrow;
+    }
+  }
 
-    return _handleResponse(response);
+  void _handleConnectionError(dynamic e) {
+    if (e is SocketException || e is http.ClientException || e is HttpException) {
+      _connectivityController.setServerDown();
+    }
+    print("API Connection Error: $e");
   }
 
   Map<String, dynamic> _handleResponse(http.Response response) {
@@ -115,6 +145,11 @@ class ApiService {
 
       _licenseService.enforcePayload(licensePayload);
       return payload;
+    }
+
+    if (response.statusCode >= 500) {
+      // Internal server error, maybe server is up but broken?
+      // We could also trigger server down here if desired.
     }
 
     if (response.statusCode >= 400 && !payload.containsKey('message')) {
@@ -146,3 +181,4 @@ class ApiService {
     return {'message': body};
   }
 }
+

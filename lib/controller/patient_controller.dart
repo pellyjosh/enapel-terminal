@@ -9,7 +9,8 @@ import 'package:get/get.dart';
 
 class PatientController extends GetxController {
   late final ApiService apiService;
-  late final bool isServerMode;
+  bool isServerMode = false;
+  bool _isInitialized = false;
 
   RxList<PatientModel> patientList = <PatientModel>[].obs;
   var filteredList = <PatientModel>[].obs;
@@ -26,6 +27,7 @@ class PatientController extends GetxController {
     try {
       isLoading.value = true;
       isServerMode = await ConnectionHelper.isServerConnection();
+      _isInitialized = true;
 
       if (isServerMode) {
         apiService = Get.put(ApiService());
@@ -88,6 +90,7 @@ class PatientController extends GetxController {
   }
 
   Future<void> fetchPatients() async {
+    if (!_isInitialized) await _initialize();
     try {
       isLoading.value = true;
       errorMessage.value = '';
