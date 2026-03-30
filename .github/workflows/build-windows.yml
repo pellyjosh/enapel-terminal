@@ -30,17 +30,17 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release --dart-define=ENAPEL_CLOUD_URL=https://enapel.hubolux.com
 
+      - name: Create dist directory
+        run: mkdir -p dist
+
       - name: Build Windows installer
-        if: ${{ hashFiles('build/windows/installer.iss') != '' }}
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.5
         with:
-          path: build/windows/installer.iss
+          path: windows/installer.iss
 
-      - name: Upload build artifacts
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: enapel-terminal-windows
-          if-no-files-found: warn
-          path: |
-            build/windows/x64/runner/Release/**
-            dist/*.exe
+          if-no-files-found: error
+          path: dist/EnapelTerminal-Setup.exe
