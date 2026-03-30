@@ -19,7 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 ; Output a single Setup.exe
-OutputDir=dist
+OutputDir={#SourcePath}\..\dist
 OutputBaseFilename=EnapelTerminal-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes

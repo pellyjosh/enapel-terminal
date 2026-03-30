@@ -30,9 +30,6 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release --dart-define=ENAPEL_CLOUD_URL=https://enapel.hubolux.com
 
-      - name: Create dist directory
-        run: mkdir -p dist
-
       - name: Build Windows installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.5
         with:
